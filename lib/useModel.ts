@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Message } from "@/types";
+import { invalidateStaleModelCache } from "./model-cache";
 
 export type ModelStatus = "idle" | "loading" | "ready" | "error";
 export type LoadPhase = "runtime-loading" | "downloading" | "loading-model" | "warming-up" | "ready";
@@ -80,6 +81,14 @@ export function useChatModel() {
     const init = async () => {
       try {
         if (typeof Worker === "undefined") throw new Error("Browser không hỗ trợ Web Worker.");
+        // Drop caches from older pinned revisions BEFORE the worker loads,
+        // so mixed-version weights can never reach the runtime.
+        try {
+          const v = await invalidateStaleModelCache();
+          if (v === "cleared") console.debug(`${LOG} stale model cache cleared`);
+        } catch (e) {
+          console.warn(`${LOG} cache check failed`, e);
+        }
         const w = new Worker(new URL("../workers/chat.worker.ts", import.meta.url), { type: "module" });
         workerRef.current = w;
         w.onmessage = (ev: MessageEvent) => {

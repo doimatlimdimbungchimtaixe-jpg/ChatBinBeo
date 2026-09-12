@@ -27,7 +27,7 @@ English-only chat web with a **real LLM running locally in the browser** — no 
 ## AI model
 
 - **Model:** `onnx-community/Qwen2.5-0.5B-Instruct` (Apache-2.0), ~494M params, instruction-tuned chat
-- **Weights:** quantized `q4` ONNX, downloaded once from HuggingFace Hub then cached by the browser (`env.useBrowserCache`). Nothing model-sized is committed to this repo (`public/models/` holds only `.gitkeep`).
+- **Weights:** quantized `q4` ONNX, downloaded once from HuggingFace Hub then cached by the browser (`env.useBrowserCache`). Pinned to revision `cc5cc01a` — the app auto-invalidates older caches and Settings has "Clear model cache & reload" for a clean slate. Nothing model-sized is committed to this repo (`public/models/` holds only `.gitkeep`).
 - **First load:** UI renders immediately, model initializes in the background with real progress (`Loading runtime... → Downloading model... % → Ready`) plus a 1-token background warm-up. Quantized `q4` keeps the download small (~750MB single `model_q4.onnx` + tokenizer files); WebGPU preferred, WASM fallback, single worker/singleton instance (no reload loops). Per-file byte totals from the runtime feed real Model size / Downloaded / Speed metrics — no faked progress.
 - **Tokenizer:** Qwen2 BPE, vocab 151936, IDs read live (EOS 151645 is passed explicitly to every generation).
 - **Pipeline:** normalize history (8 latest turns) → `apply_chat_template` (system/user/assistant, ChatML) → tokenize → sample (temperature 0.5, top_p 0.9, repetition penalty 1.1, max 160, cap 512) → `TextStreamer` chunks → UI. Runaway guard aborts degenerate loops with an error (never a fake answer).
@@ -60,6 +60,7 @@ Useful test scripts (Node, real ONNX inference, weights cached):
 node scripts/test-repetition.mjs  # 14 runs: loops/leaks/stream-integrity
 node scripts/test-concise.mjs     # 27 runs: concise on-topic English answers
 node scripts/test-final.mjs       # creator identity + short replies + recall
+node scripts/test-benchmark.mjs   # 8 prompts x3 + context: relevance/English/clarity
 ```
 
 ## Environment variables

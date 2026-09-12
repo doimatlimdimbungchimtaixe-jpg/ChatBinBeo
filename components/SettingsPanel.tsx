@@ -7,6 +7,7 @@ export function SettingsPanel(props: {
   onChange: (s: AppSettings) => void;
   onClose: () => void;
   onClearAll: () => void;
+  onClearCache: () => Promise<void>;
   modelMeta: { model?: string; params?: string; vocabSize?: number; contextLength?: number; device?: string; dtype?: string; eosId?: number[] | number | null; bosId?: number | null; padId?: number | null };
   modelStatus: string;
   lastStats?: { inputTokens: number; generatedTokens: number; generationTimeMs: number; firstTokenMs?: number; tokensPerSec: number; stopReason?: string } | null;
@@ -107,14 +108,23 @@ export function SettingsPanel(props: {
           onClick={() => {
             if (confirm("Xóa toàn bộ chat?")) props.onClearAll();
           }}
-          className="mb-4 w-full rounded-xl border border-red-300 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950"
+          className="mb-2 w-full rounded-xl border border-red-300 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950"
         >
           Clear all chats
         </button>
 
+        <button
+          onClick={async () => {
+            if (confirm("Xóa model cache và tải lại? (dùng khi nghi cache cũ/hỏng)")) await props.onClearCache();
+          }}
+          className="mb-4 w-full rounded-xl border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+        >
+          Clear model cache & reload
+        </button>
+
         <div className="text-center text-xs text-neutral-500">
           <div className="font-semibold text-sm text-neutral-700 dark:text-neutral-200">ChatBinBeo</div>
-          <div>Created by Bin</div>
+          <div>Created by Bin Beo</div>
         </div>
       </div>
     </div>

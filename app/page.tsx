@@ -7,6 +7,7 @@ import { SettingsPanel } from "@/components/SettingsPanel";
 import { useConversations, useSettings } from "@/lib/store";
 import { useChatModel } from "@/lib/useModel";
 import { isProbablyVietnamese } from "@/lib/detectVietnamese";
+import { clearModelCaches } from "@/lib/model-cache";
 import type { Message } from "@/types";
 
 const SUGGESTIONS = ["Tell me a random fact", "Let's chat", "Ask me something"];
@@ -301,6 +302,10 @@ export default function Page() {
         onChange={setSettings}
         onClose={() => setSettingsOpen(false)}
         onClearAll={clearAll}
+        onClearCache={async () => {
+          await clearModelCaches();
+          location.reload();
+        }}
         modelMeta={modelMeta}
         modelStatus={status}
         lastStats={lastStats}

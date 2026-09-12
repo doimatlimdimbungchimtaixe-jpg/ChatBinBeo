@@ -2,6 +2,7 @@ import type { ChatModel, ChatModelInfo } from "./ChatModel";
 import type { GenerationOptions, Message } from "@/types";
 import {
   MODEL_ID,
+  MODEL_REVISION,
   DTYPE,
   CONTEXT_USED,
   SYSTEM_PROMPT,
@@ -62,6 +63,7 @@ export class QwenChatModel implements ChatModel {
     try {
       this.pipe = await pipeline("text-generation", MODEL_ID, {
         dtype: DTYPE,
+        revision: MODEL_REVISION,
         device: useGpu ? "webgpu" : "wasm",
         progress_callback: (p: { progress?: number }) => {
           if (typeof p?.progress === "number") onProgress?.(p.progress);
@@ -71,6 +73,7 @@ export class QwenChatModel implements ChatModel {
       this.device = "wasm";
       this.pipe = await pipeline("text-generation", MODEL_ID, {
         dtype: DTYPE,
+        revision: MODEL_REVISION,
         device: "wasm",
         progress_callback: (p: { progress?: number }) => {
           if (typeof p?.progress === "number") onProgress?.(p.progress);

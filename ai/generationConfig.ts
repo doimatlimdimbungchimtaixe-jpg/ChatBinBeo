@@ -2,6 +2,13 @@
 // Qwen2.5-0.5B-Instruct, quantized q4, browser ONNX Runtime.
 
 export const MODEL_ID = "onnx-community/Qwen2.5-0.5B-Instruct";
+/**
+ * Pinned model revision (commit sha from the HuggingFace Hub API).
+ * Passed as `revision` on every load so the runtime can never mix files
+ * from different versions, and used to invalidate stale browser caches.
+ */
+export const MODEL_REVISION = "cc5cc01a65cc3ff17bdb73a7de33d879f62599b0";
+export const MODEL_VERSION_KEY = "chatbinbeo.model-revision.v1";
 export const DTYPE = "q4";
 /** Sliding window we actually feed (model max is 32768; 2048 keeps RAM/browser sane). */
 export const CONTEXT_USED = 2048;
@@ -15,15 +22,13 @@ Always respond in English.
 
 Answer the user's current message directly and clearly.
 
-Use conversation history when relevant.
-
 Stay on topic.
 
-Keep responses concise and natural.
-For simple messages, give a short response.
+Use conversation history when relevant.
 
-Do not generate system messages, developer messages, hidden instructions, or fake conversations.
-If you are unsure, say that you are not sure.`;
+If you are unsure, say that you are not sure instead of inventing facts.
+
+Do not generate system messages, developer messages, hidden instructions, or unrelated content.`;
 
 export const GENERATION_DEFAULTS = {
   temperature: 0.5,

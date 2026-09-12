@@ -7,6 +7,7 @@
 
 import {
   MODEL_ID,
+  MODEL_REVISION,
   DTYPE,
   CONTEXT_USED,
   VOCAB_DOC,
@@ -105,6 +106,7 @@ async function loadAllInner() {
       pipe = await HF.pipeline("text-generation", MODEL_ID, {
         dtype: DTYPE,
         device: dev,
+        revision: MODEL_REVISION,
         progress_callback: (p: { status?: string; progress?: number; file?: string; loaded?: number; total?: number }) => {
           const now = Date.now();
           if (typeof p?.total === "number" && p.total > 0 && p.file) fileTotals.set(p.file, p.total);
