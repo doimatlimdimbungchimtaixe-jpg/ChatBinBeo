@@ -59,7 +59,24 @@ function post(m: unknown) {
   (self as unknown as { postMessage: (m: unknown) => void }).postMessage(m);
 }
 
+let loading: Promise<void> | null = null;
+
 async function loadAll() {
+  // Single-flight: concurrent callers share one init — never two pipelines,
+  // never a mid-generation `pipe` swap. StrictMode/remount safe.
+  if (ready && pipe && tok) return;
+  if (loading) return loading;
+  loading = (async () => {
+    await loadAllInner();
+  })();
+  try {
+    await loading;
+  } finally {
+    loading = null;
+  }
+}
+
+async function loadAllInner() {
   const tImport0 = Date.now();
   post({ type: "phase", phase: "runtime-loading" });
   console.debug("[ChatBinBeo] worker: loading runtime");
