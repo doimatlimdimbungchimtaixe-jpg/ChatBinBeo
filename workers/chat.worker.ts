@@ -78,6 +78,9 @@ async function loadAll() {
   let firstProgressAt = 0;
   let lastProgressAt = 0;
   let sawDownload = false;
+  // Real byte counts straight from the runtime's progress events (per shard).
+  const fileTotals = new Map<string, number>();
+  const fileLoaded = new Map<string, number>();
   let lastErr: unknown = null;
   for (const dev of order) {
     try {
@@ -85,8 +88,10 @@ async function loadAll() {
       pipe = await HF.pipeline("text-generation", MODEL_ID, {
         dtype: DTYPE,
         device: dev,
-        progress_callback: (p: { status?: string; progress?: number; file?: string }) => {
+        progress_callback: (p: { status?: string; progress?: number; file?: string; loaded?: number; total?: number }) => {
           const now = Date.now();
+          if (typeof p?.total === "number" && p.total > 0 && p.file) fileTotals.set(p.file, p.total);
+          if (typeof p?.loaded === "number" && p.file) fileLoaded.set(p.file, Math.max(fileLoaded.get(p.file) ?? 0, p.loaded));
           if (p?.status === "progress" && typeof p?.progress === "number") {
             if (!firstProgressAt) firstProgressAt = now;
             lastProgressAt = now;
@@ -109,6 +114,11 @@ async function loadAll() {
   const initMs = Date.now() - tPipe0;
   // download time = span with real byte-progress; 0 when fully served from cache
   const downloadMs = sawDownload && firstProgressAt && lastProgressAt ? Math.max(1, lastProgressAt - firstProgressAt) : 0;
+  let modelSizeBytes = 0;
+  for (const v of fileTotals.values()) modelSizeBytes += v;
+  let downloadedBytes = 0;
+  for (const v of fileLoaded.values()) downloadedBytes += v;
+  if (downloadedBytes === 0) downloadedBytes = modelSizeBytes;
   tok = pipe.tokenizer;
   // Resolve special token IDs from the actual Qwen2.5 tokenizer (not hardcoded guesses).
   try {
@@ -124,6 +134,9 @@ async function loadAll() {
     initMs,
     downloadMs,
     cached: !sawDownload,
+    modelSizeBytes,
+    downloadedBytes,
+    downloadMBps: downloadMs > 0 && downloadedBytes > 0 ? downloadedBytes / (downloadMs / 1000) / 1048576 : 0,
     device: deviceUsed,
     dtype: DTYPE,
   };

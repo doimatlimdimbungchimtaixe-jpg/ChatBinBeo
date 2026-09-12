@@ -10,7 +10,7 @@ export function ChatInput(props: { disabled: boolean; generating: boolean; onSen
     setText("");
   };
   return (
-    <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
+    <div className="border-t border-neutral-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-neutral-800">
       <div className="mx-auto flex max-w-3xl items-end gap-2">
         <textarea
           value={text}

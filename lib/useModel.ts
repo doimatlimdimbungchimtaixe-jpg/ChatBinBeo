@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Message } from "@/types";
-import { checkGuestLimit, recordGuestMessage } from "./usage/guest-limit";
 
 export type ModelStatus = "idle" | "loading" | "ready" | "error";
 export type LoadPhase = "runtime-loading" | "downloading" | "loading-model" | "warming-up" | "ready";
@@ -17,6 +16,9 @@ export interface LoadMetrics {
   initMs?: number;
   downloadMs?: number;
   cached?: boolean;
+  modelSizeBytes?: number;
+  downloadedBytes?: number;
+  downloadMBps?: number;
   warmupMs?: number;
   device?: string;
   dtype?: string;
@@ -184,7 +186,7 @@ export function useChatModel() {
   const generate = useCallback(
     (
       messages: Message[],
-      opts: { maxTokens: number; temperature: number; isGuest?: boolean },
+      opts: { maxTokens: number; temperature: number },
       onToken: (p: string) => void
     ): Promise<{ full: string; stats: RuntimeStats | null }> => {
       return new Promise((resolve, reject) => {
@@ -192,20 +194,6 @@ export function useChatModel() {
         if (!w || status !== "ready") {
           reject(new Error("Model is still loading... Đợi model sẵn sàng rồi thử lại."));
           return;
-        }
-        // Guest limit is enforced HERE — the single choke point that admits
-        // generation — so a capped guest cannot start new inference.
-        if (opts.isGuest) {
-          const gate = checkGuestLimit();
-          if (!gate.allowed) {
-            reject(
-              new Error(
-                "Guest limit reached.\n\nSign in with Google to continue chatting and save your history."
-              )
-            );
-            return;
-          }
-          recordGuestMessage();
         }
         // Validate payload — never send undefined/empty content into the tokenizer.
         const clean = messages

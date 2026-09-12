@@ -10,7 +10,7 @@ export function SettingsPanel(props: {
   modelMeta: { model?: string; params?: string; vocabSize?: number; contextLength?: number; device?: string; dtype?: string; eosId?: number[] | number | null; bosId?: number | null; padId?: number | null };
   modelStatus: string;
   lastStats?: { inputTokens: number; generatedTokens: number; generationTimeMs: number; firstTokenMs?: number; tokensPerSec: number; stopReason?: string } | null;
-  loadMetrics?: { runtimeImportMs?: number; initMs?: number; downloadMs?: number; cached?: boolean; warmupMs?: number } | null;
+  loadMetrics?: { runtimeImportMs?: number; initMs?: number; downloadMs?: number; cached?: boolean; modelSizeBytes?: number; downloadedBytes?: number; downloadMBps?: number; warmupMs?: number } | null;
 }) {
   if (!props.open) return null;
   return (
@@ -81,6 +81,10 @@ export function SettingsPanel(props: {
           <div>External AI API: none</div>
           {props.loadMetrics && (
             <>
+              <div>Model size: {props.loadMetrics.modelSizeBytes ? `${(props.loadMetrics.modelSizeBytes / 1048576).toFixed(0)} MB` : "…"}</div>
+              <div>Downloaded: {props.loadMetrics.downloadedBytes ? `${(props.loadMetrics.downloadedBytes / 1048576).toFixed(0)} MB` : "0 MB"}</div>
+              <div>Download speed: {props.loadMetrics.downloadMBps ? `${props.loadMetrics.downloadMBps.toFixed(1)} MB/s` : "—"}</div>
+              <div>Cache: {props.loadMetrics.cached ? "hit" : "miss"}</div>
               <div>Runtime import: {props.loadMetrics.runtimeImportMs ?? "?"} ms</div>
               <div>Download: {props.loadMetrics.downloadMs ?? "?"} ms{props.loadMetrics.cached ? " (cache hit)" : ""}</div>
               <div>Init: {props.loadMetrics.initMs ?? "?"} ms</div>

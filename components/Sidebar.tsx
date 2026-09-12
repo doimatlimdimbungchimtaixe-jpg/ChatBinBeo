@@ -2,7 +2,6 @@
 import { useState } from "react";
 import type { Conversation } from "@/types";
 import { cx } from "@/lib/utils";
-import { AccountBlock } from "./AuthPanel";
 
 export function Sidebar(props: {
   open: boolean;
@@ -69,7 +68,8 @@ export function Sidebar(props: {
                   {c.title}
                 </button>
               )}
-              <div className="mt-1 hidden gap-2 text-[11px] text-neutral-500 group-hover:flex">
+              {/* Always visible: hover doesn't exist on touch screens. */}
+              <div className="mt-1 flex gap-2 text-[11px] text-neutral-500">
                 <button
                   onClick={() => {
                     setEditingId(c.id);
@@ -87,11 +87,10 @@ export function Sidebar(props: {
           ))}
         </div>
         <div className="border-t border-neutral-200 p-3 text-xs dark:border-neutral-800">
-          <AccountBlock />
-          <button onClick={props.onOpenSettings} className="mt-1 w-full rounded-lg px-2 py-2 text-left hover:bg-neutral-100 dark:hover:bg-neutral-900">
+          <button onClick={props.onOpenSettings} className="w-full rounded-lg px-2 py-2 text-left hover:bg-neutral-100 dark:hover:bg-neutral-900">
             ⚙ Settings
           </button>
-          <div className="mt-1 px-2 text-neutral-500">Created by Bin</div>
+          <div className="mt-1 px-2 text-neutral-500">Created by Bin Beo</div>
         </div>
       </aside>
     </>

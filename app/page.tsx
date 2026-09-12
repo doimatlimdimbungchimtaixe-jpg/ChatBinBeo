@@ -7,21 +7,13 @@ import { SettingsPanel } from "@/components/SettingsPanel";
 import { useConversations, useSettings } from "@/lib/store";
 import { useChatModel } from "@/lib/useModel";
 import { isProbablyVietnamese } from "@/lib/detectVietnamese";
-import { checkGuestLimit } from "@/lib/usage/guest-limit";
-import { ownerIdFor } from "@/lib/history/storage";
-import { SignInButton } from "@/components/AuthPanel";
-import { useSession } from "next-auth/react";
 import type { Message } from "@/types";
 
 const SUGGESTIONS = ["Tell me a random fact", "Let's chat", "Ask me something"];
 
 export default function Page() {
-  const { data: session } = useSession();
-  const sessionUserId = (session?.user as { id?: string } | undefined)?.id ?? null;
-  const isGuest = !sessionUserId;
-  const ownerId = ownerIdFor(sessionUserId);
-  const { conversations, active, activeId, select, newChat, addMessage, updateMessage, rename, remove, clearChat, clearAll, storageError, migrationNote, dismissMigrationNote } =
-    useConversations(ownerId);
+  const { conversations, active, activeId, select, newChat, addMessage, updateMessage, rename, remove, clearChat, clearAll, storageError } =
+    useConversations();
   const { settings, setSettings } = useSettings();
   const { status, error, phase, progress, modelMeta, loadMetrics, lastStats, firstTokenPending, generate, stop, retryLoad } = useChatModel();
 
@@ -30,17 +22,27 @@ export default function Page() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [langWarning, setLangWarning] = useState(false);
-  const [limitHit, setLimitHit] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [stuckTop, setStuckTop] = useState(false);
 
-  // Fresh login = fresh quota view.
-  useEffect(() => {
-    setLimitHit(false);
-  }, [sessionUserId]);
+  // Auto-scroll only while the user is already near the bottom — never yank
+  // them away from older messages they are reading.
+  const nearBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }, []);
+
+  const scrollToBottom = useCallback((smooth = true) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+  }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [active?.messages.length, generating]);
+    if (!stuckTop) bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [active?.messages.length, generating, stuckTop]);
 
   useEffect(() => {
     if (status === "ready") console.debug("[ChatBinBeo] model ready");
@@ -64,7 +66,7 @@ export default function Page() {
       try {
         const { full } = await generate(
           history,
-          { maxTokens: settings.maxTokens, temperature: settings.temperature, isGuest },
+          { maxTokens: settings.maxTokens, temperature: settings.temperature },
           (partial) => {
             if (firstToken) {
               firstToken = false;
@@ -78,15 +80,14 @@ export default function Page() {
       } catch (e) {
         // Never swallow: real error to console (dev) + visible recoverable state (UI).
         console.error("[ChatBinBeo] generation error", e);
-        const msg = e instanceof Error ? e.message : "Generation lỗi.";
-        if (msg.startsWith("Guest limit reached")) setLimitHit(true);
+        const msg = e instanceof Error ? e.message : "Generation failed.";
         setGenError(msg);
         if (!targetAssistantId) updateMessage(chatId, assistant.id, "");
       } finally {
         setGenerating(false);
       }
     },
-    [addMessage, generate, settings.maxTokens, settings.temperature, isGuest, updateMessage]
+    [addMessage, generate, settings.maxTokens, settings.temperature, updateMessage]
   );
 
   const onSend = useCallback(
@@ -102,12 +103,6 @@ export default function Page() {
         return;
       }
       setLangWarning(false);
-      // Proactive guest-limit check (same module the generation choke point
-      // enforces, so UI and runtime can never disagree).
-      if (isGuest && !checkGuestLimit().allowed) {
-        setLimitHit(true);
-        return;
-      }
       if (status !== "ready") {
         setGenError("Model is still loading... Đợi model sẵn sàng rồi gửi lại.");
         return;
@@ -120,7 +115,7 @@ export default function Page() {
       const base = (active?.id === chatId ? active.messages : conversations.find((c) => c.id === chatId)?.messages ?? []).concat([userMsg]);
       void runModel(chatId, base);
     },
-    [ensureChat, addMessage, active, conversations, runModel, generating, status, isGuest]
+    [ensureChat, addMessage, active, conversations, runModel, generating, status]
   );
 
   const onRegenerate = useCallback(() => {
@@ -139,8 +134,21 @@ export default function Page() {
   const onCopy = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
+      return;
     } catch {
-      /* clipboard may be blocked */
+      /* fall through to legacy fallback (mobile / non-secure contexts) */
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch {
+      /* clipboard unavailable */
     }
   }, []);
 
@@ -151,7 +159,7 @@ export default function Page() {
   }, [active]);
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-dvh overflow-hidden">
       <Sidebar
         open={sidebarOpen}
         conversations={conversations}
@@ -170,7 +178,7 @@ export default function Page() {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2.5 dark:border-neutral-800">
           <button onClick={() => setSidebarOpen(true)} className="rounded-lg px-2 py-1 hover:bg-neutral-100 md:hidden dark:hover:bg-neutral-900">
             ☰
@@ -189,23 +197,7 @@ export default function Page() {
           </div>
         )}
         {storageError && <div className="border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-xs text-yellow-800">{storageError}</div>}
-        {genError && <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">Generation lỗi: {genError}</div>}
-        {limitHit && isGuest && (
-          <div className="border-b border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
-            <div className="mb-2 whitespace-pre-line">Guest limit reached.{"\n\n"}Sign in with Google to continue chatting and save your history.</div>
-            <div className="max-w-xs">
-              <SignInButton />
-            </div>
-          </div>
-        )}
-        {migrationNote !== null && (
-          <div className="flex items-center justify-between gap-3 border-b border-green-300 bg-green-50 px-4 py-2 text-xs text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100">
-            <span>Moved {migrationNote} guest chat{migrationNote === 1 ? "" : "s"} into your account.</span>
-            <button onClick={dismissMigrationNote} className="shrink-0 rounded-lg border border-green-400 px-3 py-1 font-medium hover:bg-green-100 dark:hover:bg-green-900">
-              OK
-            </button>
-          </div>
-        )}
+        {genError && <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">Generation failed: {genError}</div>}
         {langWarning && (
           <div className="flex items-center justify-between gap-3 border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
             <span>ChatBinBeo currently only speaks English. Please send your message in English.</span>
@@ -215,20 +207,18 @@ export default function Page() {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto">
+        <div
+          ref={scrollRef}
+          onScroll={() => setStuckTop(!nearBottom())}
+          className="flex-1 overflow-y-auto"
+        >
           {!active || active.messages.length === 0 ? (
             <div className="mx-auto flex h-full max-w-2xl flex-col items-center justify-center px-6 text-center">
               <h1 className="text-3xl font-semibold tracking-tight">ChatBinBeo</h1>
               <p className="mt-2 text-[15px] text-neutral-600 dark:text-neutral-300">What do you want to talk about?</p>
               <div className="mt-4 max-w-md rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs leading-relaxed text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
-                Note: ChatBinBeo only chats in <b>English</b>. Viết tiếng Việt hoặc ngôn ngữ khác sẽ được AI nhắc dùng tiếng Anh.
+                Note: ChatBinBeo only chats in <b>English</b>.
               </div>
-              {isGuest && (
-                <div className="mt-3 w-full max-w-xs">
-                  <div className="mb-2 text-xs text-neutral-500">Sign in with Google to save your chat history.</div>
-                  <SignInButton />
-                </div>
-              )}
               <div className="mt-6 flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((s) => (
                   <button
@@ -290,6 +280,17 @@ export default function Page() {
             </div>
           )}
         </div>
+        {stuckTop && active && active.messages.length > 0 && (
+          <button
+            onClick={() => {
+              setStuckTop(false);
+              scrollToBottom();
+            }}
+            className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full border border-neutral-300 bg-white px-4 py-2 text-xs font-medium shadow-lg hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+          >
+            ↓ New response
+          </button>
+        )}
 
         <ChatInput disabled={status !== "ready"} generating={generating} onSend={onSend} onStop={() => stop()} />
       </main>

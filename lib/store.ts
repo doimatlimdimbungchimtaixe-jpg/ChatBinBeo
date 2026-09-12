@@ -2,11 +2,55 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AppSettings, Conversation, Message, ThemeMode } from "@/types";
 import { now, uid, titleFromMessage } from "./utils";
-import { GUEST_OWNER, migrateGuestToUser, ownerNamespace, readConversations, writeConversations } from "./history/storage";
 
+const CHATS_KEY = "chatbinbeo.conversations.v1";
+// Namespaces from the retired accounts era — adopted once so nobody loses chats.
+const LEGACY_KEYS = ["chatbinbeo.conversations.guest.v1"];
 const SETTINGS_KEY = "chatbinbeo.settings.v1";
 
-const DEFAULT_SETTINGS: AppSettings = { theme: "system", temperature: 0.5, maxTokens: 160 };
+function validConversation(c: unknown): c is Conversation {
+  if (!c || typeof c !== "object") return false;
+  const o = c as Record<string, unknown>;
+  return typeof o.id === "string" && Array.isArray(o.messages);
+}
+
+function readChats(): Conversation[] {
+  try {
+    const raw = localStorage.getItem(CHATS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw) as unknown;
+      if (Array.isArray(arr)) return arr.filter(validConversation);
+      return [];
+    }
+    // One-time adoption of pre-accounts history.
+    for (const k of LEGACY_KEYS) {
+      try {
+        const legacy = localStorage.getItem(k);
+        if (!legacy) continue;
+        const arr = JSON.parse(legacy) as unknown;
+        if (Array.isArray(arr) && arr.length > 0) {
+          const chats = arr.filter(validConversation);
+          localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+          return chats;
+        }
+      } catch {
+        /* try next key */
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function writeChats(chats: Conversation[]): boolean {
+  try {
+    localStorage.setItem(CHATS_KEY, JSON.stringify(chats.slice(0, 100)));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function readSettings(): AppSettings {
   try {
@@ -15,36 +59,30 @@ function readSettings(): AppSettings {
     const s = JSON.parse(raw) as Partial<AppSettings>;
     return {
       theme: (s.theme as ThemeMode) ?? "system",
-      temperature: typeof s.temperature === "number" ? Math.min(1.5, Math.max(0.1, s.temperature)) : 0.8,
-      maxTokens: typeof s.maxTokens === "number" ? Math.min(256, Math.max(16, s.maxTokens)) : 120,
+      temperature: typeof s.temperature === "number" ? Math.min(1.2, Math.max(0.1, s.temperature)) : 0.5,
+      maxTokens: typeof s.maxTokens === "number" ? Math.min(512, Math.max(32, s.maxTokens)) : 160,
     };
   } catch {
     return DEFAULT_SETTINGS;
   }
 }
 
-export function useConversations(ownerId: string) {
+const DEFAULT_SETTINGS: AppSettings = { theme: "system", temperature: 0.5, maxTokens: 160 };
+
+export function useConversations() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
-  const [migrationNote, setMigrationNote] = useState<number | null>(null);
 
-  // Reload whenever the signed-in account changes — each owner only ever
-  // sees their own namespace. Guest chats are merged into the account first
-  // (same tick), so nothing is lost or shown under the wrong owner.
   useEffect(() => {
-    let moved = 0;
-    if (ownerId !== GUEST_OWNER) moved = migrateGuestToUser(ownerId);
-    setConversations(readConversations(ownerId));
-    setActiveId(null);
-    setMigrationNote(moved > 0 ? moved : null);
-  }, [ownerId]);
+    setConversations(readChats());
+  }, []);
 
   useEffect(() => {
     if (conversations.length === 0) return;
-    const ok = writeConversations(ownerId, conversations);
-    setStorageError(ok ? null : "Không lưu được chat (storage đầy hoặc bị chặn).");
-  }, [conversations, ownerId]);
+    const ok = writeChats(conversations);
+    setStorageError(ok ? null : "Cannot save chats (storage full or blocked).");
+  }, [conversations]);
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
 
@@ -81,10 +119,7 @@ export function useConversations(ownerId: string) {
   }, []);
 
   const remove = useCallback((chatId: string) => {
-    setConversations((prev) => {
-      const next = prev.filter((c) => c.id !== chatId);
-      return next;
-    });
+    setConversations((prev) => prev.filter((c) => c.id !== chatId));
     setActiveId((cur) => (cur === chatId ? null : cur));
   }, []);
 
@@ -96,11 +131,11 @@ export function useConversations(ownerId: string) {
     setConversations([]);
     setActiveId(null);
     try {
-      localStorage.removeItem(ownerNamespace(ownerId));
+      localStorage.removeItem(CHATS_KEY);
     } catch { /* ignore */ }
-  }, [ownerId]);
+  }, []);
 
-  return { conversations, active, activeId, select, newChat, addMessage, updateMessage, rename, remove, clearChat, clearAll, storageError, migrationNote, dismissMigrationNote: () => setMigrationNote(null) };
+  return { conversations, active, activeId, select, newChat, addMessage, updateMessage, rename, remove, clearChat, clearAll, storageError };
 }
 
 export function useSettings() {
